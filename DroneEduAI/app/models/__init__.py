@@ -1,0 +1,1 @@
+# DroneEduAI models module
