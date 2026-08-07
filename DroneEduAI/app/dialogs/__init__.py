@@ -1,1 +1,0 @@
-# DroneEduAI dialogs module
