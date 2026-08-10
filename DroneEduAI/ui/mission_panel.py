@@ -27,6 +27,7 @@ from PySide6.QtGui import (
 
 import config
 from models.block import MissionBlock
+from ui.mavlink_panel import MAVLinkPanel
 
 try:
     from PySide6.QtSvg import QSvgRenderer
@@ -218,12 +219,13 @@ class MissionPanel(QWidget):
     run_requested    = Signal()
     stop_requested   = Signal()
 
-    def __init__(self, mission_controller, parent=None):
+    def __init__(self, mission_controller, mavlink_controller=None, parent=None):
         super().__init__(parent)
-        self._mc              = mission_controller
-        self._block_cards:    List[MissionBlockCard] = []
-        self._connector_widgets: List[ConnectorLine]  = []
-        self._running         = False
+        self._mc                 = mission_controller
+        self._mav_ctrl           = mavlink_controller
+        self._block_cards:       List[MissionBlockCard] = []
+        self._connector_widgets: List[ConnectorLine]    = []
+        self._running            = False
 
         self._build_ui()
 
@@ -307,6 +309,18 @@ class MissionPanel(QWidget):
             f"color: {config.COLOR_MUTED}; font-size: 12px; line-height: 1.6;"
         )
         self._blocks_layout.insertWidget(1, self._empty_lbl)  # Between header and stretch
+
+        # ── MAVLink Panel ──────────────────────────────────────────────────
+        self.mavlink_panel = MAVLinkPanel()
+        if self._mav_ctrl:
+            # Wire connection
+            self.mavlink_panel.connect_requested.connect(self._mav_ctrl.connect_to)
+            self.mavlink_panel.disconnect_requested.connect(self._mav_ctrl.disconnect)
+            # Wire incoming signals
+            self._mav_ctrl.connection_changed.connect(self.mavlink_panel.update_connection)
+            self._mav_ctrl.telemetry_updated.connect(self.mavlink_panel.update_telemetry)
+            self._mav_ctrl.command_ack.connect(self.mavlink_panel.append_log)
+        wrap_lay.addWidget(self.mavlink_panel)
 
         # Toolbar
         wrap_lay.addWidget(self._build_toolbar())

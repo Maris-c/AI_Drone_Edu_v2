@@ -33,9 +33,7 @@ class MissionBuilder(QWidget):
 
         self._build_ui()
         self._wire_signals()
-
-        # Simulator connection
-        self._mavlink.connect_simulator()
+        # NOTE: MAVLink connects via the panel UI — no auto-connect on startup
 
     # ── Build ────────────────────────────────────────────────────────────
     def _build_ui(self) -> None:
@@ -55,8 +53,8 @@ class MissionBuilder(QWidget):
         self.ai_panel = AIPanel()
         self.ai_panel.setMinimumWidth(380)
 
-        # Right panel
-        self.mission_panel = MissionPanel(self._mission)
+        # Right panel — pass mavlink controller so it can embed MAVLinkPanel
+        self.mission_panel = MissionPanel(self._mission, self._mavlink)
         self.mission_panel.setMinimumWidth(300)
 
         splitter.addWidget(self.ai_panel)
@@ -103,6 +101,11 @@ class MissionBuilder(QWidget):
         self.mission_panel.run_requested.connect(self._on_run_mission)
         self.mission_panel.stop_requested.connect(self._mavlink.stop_mission)
 
+        # MAVLink → header bar (connection dot)
+        self._mavlink.connection_changed.connect(
+            self._get_header_update
+        )
+
     # ── Slots ────────────────────────────────────────────────────────────
     def _on_camera_toggle(self, start: bool) -> None:
         if start:
@@ -118,6 +121,11 @@ class MissionBuilder(QWidget):
 
     def _on_run_mission(self) -> None:
         self._mavlink.run_mission(self._mission.blocks())
+
+    def _get_header_update(self) -> object:
+        """Return the header update slot (resolved at runtime to avoid circular import)."""
+        # The MainWindow wires connection_changed → header bar separately.
+        pass
 
     # ── Cleanup ──────────────────────────────────────────────────────────
     def shutdown(self) -> None:

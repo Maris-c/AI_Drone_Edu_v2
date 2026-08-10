@@ -19,7 +19,7 @@ from PySide6.QtWidgets import (
     QProgressBar, QFrame, QGridLayout, QScrollArea, QFileDialog,
     QSizePolicy,
 )
-from PySide6.QtCore import Qt, Signal, QSize, QRect, QRectF, QTimer
+from PySide6.QtCore import Qt, Signal, QSize, QRect, QRectF, QTimer, QPropertyAnimation, QEasingCurve
 from PySide6.QtGui import (
     QPainter, QPen, QColor, QFont, QPixmap, QImage,
     QLinearGradient, QBrush,
@@ -275,8 +275,11 @@ class AIPanel(QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self._camera_on    = False
-        self._current_gest = ""
+        self._camera_on     = False
+        self._current_gest  = ""
+        self._cam_anim: QPropertyAnimation | None = None
+        self._cam_body: QWidget | None = None   # the collapsible widget
+        self._cam_body_h = 264                  # natural height (set after build)
 
         self._build_ui()
 
@@ -356,10 +359,24 @@ class AIPanel(QWidget):
         cam_header.addWidget(self._cam_btn)
         cam_lay.addLayout(cam_header)
 
-        # Camera widget — height +20% (264 vs 220)
+        # Camera widget body — wrapped in a container so we can animate its height
+        self._cam_body = QWidget()
+        self._cam_body.setObjectName("camBody")
+        self._cam_body.setStyleSheet("QWidget#camBody { background: transparent; }")
+        body_lay = QVBoxLayout(self._cam_body)
+        body_lay.setContentsMargins(0, 0, 0, 0)
+        body_lay.setSpacing(0)
+
         self.camera_widget = CameraWidget()
         self.camera_widget.setMinimumHeight(264)
-        cam_lay.addWidget(self.camera_widget)
+        body_lay.addWidget(self.camera_widget)
+
+        # Start collapsed (camera is OFF by default)
+        self._cam_body_h = 264
+        self._cam_body.setMaximumHeight(0)
+        self._cam_body.setVisible(False)
+
+        cam_lay.addWidget(self._cam_body)
 
         lay.addWidget(cam_card)
 
@@ -471,18 +488,53 @@ class AIPanel(QWidget):
             }}
         """
 
-    # ── Slots ─────────────────────────────────────────────────────────────
+    # ── Slots ──────────────────────────────────────────────────
     def _on_camera_toggled(self, checked: bool) -> None:
         self._camera_on = checked
         if checked:
             self._cam_btn.setText("Camera OFF")
             self._cam_status.setStyleSheet(f"color: {config.COLOR_SUCCESS}; font-size: 12px;")
             self._cam_status.setText("● Camera Feed")
+            self._expand_camera()
         else:
             self._cam_btn.setText("Camera ON")
             self._cam_status.setStyleSheet(f"color: {config.COLOR_MUTED}; font-size: 12px;")
             self.camera_widget.clear_frame()
+            self._collapse_camera()
         self.camera_toggle_requested.emit(checked)
+
+    def _expand_camera(self) -> None:
+        """Animate camera body open."""
+        if self._cam_body is None:
+            return
+        # Stop any running animation
+        if self._cam_anim and self._cam_anim.state() == QPropertyAnimation.State.Running:
+            self._cam_anim.stop()
+
+        self._cam_body.setVisible(True)
+        self._cam_body.setMaximumHeight(0)
+
+        self._cam_anim = QPropertyAnimation(self._cam_body, b"maximumHeight", self)
+        self._cam_anim.setDuration(260)
+        self._cam_anim.setStartValue(0)
+        self._cam_anim.setEndValue(self._cam_body_h + 20)  # small extra so widget breathes
+        self._cam_anim.setEasingCurve(QEasingCurve.Type.OutCubic)
+        self._cam_anim.start()
+
+    def _collapse_camera(self) -> None:
+        """Animate camera body closed."""
+        if self._cam_body is None:
+            return
+        if self._cam_anim and self._cam_anim.state() == QPropertyAnimation.State.Running:
+            self._cam_anim.stop()
+
+        self._cam_anim = QPropertyAnimation(self._cam_body, b"maximumHeight", self)
+        self._cam_anim.setDuration(220)
+        self._cam_anim.setStartValue(self._cam_body.height())
+        self._cam_anim.setEndValue(0)
+        self._cam_anim.setEasingCurve(QEasingCurve.Type.InCubic)
+        self._cam_anim.finished.connect(lambda: self._cam_body.setVisible(False))
+        self._cam_anim.start()
 
     def _browse_model(self) -> None:
         path, _ = QFileDialog.getOpenFileName(
