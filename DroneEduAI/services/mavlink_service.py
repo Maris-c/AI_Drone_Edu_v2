@@ -155,7 +155,7 @@ class MAVLinkService(QThread):
             self._last_hb = time.time()
             if not self._connected:
                 self._connected = True
-                self.connection_changed.emit(True, "Reconnected")
+                self.connection_changed.emit(True, "MAVLink connection restored")
             self._update_mode_from_hb(msg)
 
         elif mtype == "SYS_STATUS":

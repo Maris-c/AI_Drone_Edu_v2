@@ -53,43 +53,92 @@ class CameraWidget(QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self._pixmap: QPixmap | None = None
+        self._qimage: QImage | None = None   # raw frame — no QPixmap conversion
         self._quality_metrics: dict  = {}
+        self._progress_pct: int = 0
+        self._current_gesture: str = ""
+        self._confirmed: bool = False
+        self._paint_pending: bool = False    # drop-frame guard
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self.setMinimumSize(320, 240)
 
+        # Floating progress overlay
+        self._prog_overlay = QFrame(self)
+        self._prog_overlay.setStyleSheet("background: rgba(30, 41, 59, 0.8); border-radius: 8px;")
+        self._prog_overlay.setFixedSize(220, 60)
+        self._prog_overlay.hide()
+        
+        olay = QVBoxLayout(self._prog_overlay)
+        olay.setContentsMargins(10, 8, 10, 8)
+        olay.setSpacing(4)
+        
+        self._prog_lbl = QLabel("")
+        self._prog_lbl.setStyleSheet("color: white; font-size: 11px; font-weight: bold;")
+        self._prog_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        olay.addWidget(self._prog_lbl)
+        
+        self._prog_bar = QProgressBar()
+        self._prog_bar.setRange(0, 100)
+        self._prog_bar.setTextVisible(False)
+        self._prog_bar.setFixedHeight(10)
+        self._prog_bar.setStyleSheet(f"""
+            QProgressBar {{
+                background: {config.COLOR_BORDER};
+                border-radius: 5px;
+            }}
+            QProgressBar::chunk {{
+                background: qlineargradient(x1:0,y1:0,x2:1,y2:0, stop:0 {config.COLOR_SUCCESS}, stop:1 #16A34A);
+                border-radius: 5px;
+            }}
+        """)
+        olay.addWidget(self._prog_bar)
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        # Position the overlay at bottom center
+        w = self._prog_overlay.width()
+        h = self._prog_overlay.height()
+        self._prog_overlay.setGeometry((self.width() - w) // 2, self.height() - h - 16, w, h)
+
     # ------------------------------------------------------------------
     def update_frame(self, bgr: np.ndarray) -> None:
-        rgb = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
-        h, w, c = rgb.shape
-        qimg = QImage(rgb.data, w, h, w * c, QImage.Format.Format_RGB888)
-        self._pixmap = QPixmap.fromImage(qimg)
+        # Drop frame if the previous paint hasn't completed yet
+        if self._paint_pending:
+            return
+        # Avoid cv2.cvtColor copy: use BGR_888 format and let Qt swap channels
+        # via Format_BGR888 (available in Qt 5.14+ / Qt 6)
+        h, w = bgr.shape[:2]
+        bytes_per_line = w * 3
+        self._qimage = QImage(
+            bgr.data, w, h, bytes_per_line, QImage.Format.Format_BGR888
+        ).copy()  # .copy() makes Qt own the buffer (thread-safe)
+        self._paint_pending = True
         self.update()
 
     def clear_frame(self) -> None:
-        self._pixmap = None
+        self._qimage = None
         self._quality_metrics = {}
+        self._paint_pending = False
         self.update()
 
     def update_quality_overlay(self, metrics: dict) -> None:
-        """Receive quality data; will be painted on next paintEvent."""
+        """Receive quality data; painted on next paintEvent (no extra repaint)."""
         self._quality_metrics = metrics
-        # No extra update() needed — frame_ready triggers repaint already
 
     # ------------------------------------------------------------------
     def paintEvent(self, _event) -> None:
+        self._paint_pending = False
         p = QPainter(self)
-        p.setRenderHint(QPainter.RenderHint.Antialiasing)
         p.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
         W, H = self.width(), self.height()
 
-        if self._pixmap:
-            pw, ph = self._pixmap.width(), self._pixmap.height()
-            scale = min(W / pw, H / ph) if pw > 0 and ph > 0 else 1.0
-            tw, th = int(pw * scale), int(ph * scale)
-            ox = (W - tw) // 2
-            oy = (H - th) // 2
-            p.drawPixmap(QRect(ox, oy, tw, th), self._pixmap)
+        if self._qimage and not self._qimage.isNull():
+            iw, ih = self._qimage.width(), self._qimage.height()
+            scale = min(W / iw, H / ih) if iw > 0 and ih > 0 else 1.0
+            tw, th = int(iw * scale), int(ih * scale)
+            ox = (W - tw) >> 1
+            oy = (H - th) >> 1
+            p.drawImage(QRect(ox, oy, tw, th), self._qimage)
             self._draw_roi_brackets(p, ox, oy, tw, th, tight=True)
             self._draw_quality_overlay(p, ox, oy, tw, th)
         else:
@@ -225,8 +274,11 @@ def _load_svg_pixmap(path: str, size: int = 48) -> QPixmap | None:
 
 
 class GestureCard(QFrame):
+    clicked = Signal(str)
+
     def __init__(self, title: str, icon_path: str, parent=None):
         super().__init__(parent)
+        self.title = title
         self.setObjectName("gestureCard")
         self.setFixedHeight(92)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -265,6 +317,11 @@ class GestureCard(QFrame):
         )
         lay.addWidget(name_lbl)
 
+    def mousePressEvent(self, event) -> None:
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.clicked.emit(self.title)
+        super().mousePressEvent(event)
+
 
 # ────────────────────────────────────────────────────────────────────────────
 # Main AI Panel
@@ -272,6 +329,7 @@ class GestureCard(QFrame):
 class AIPanel(QWidget):
     camera_toggle_requested = Signal(bool)
     model_path_changed      = Signal(str)
+    manual_gesture_added    = Signal(str)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -302,7 +360,7 @@ class AIPanel(QWidget):
         lay.setSpacing(10)
 
         # ── 1. Title ──────────────────────────────────────────────────────
-        title = QLabel("AI BLOCK")
+        title = QLabel("AI GESTURE")
         title.setStyleSheet(
             f"color: {config.COLOR_TEXT}; font-size: 16px; font-weight: 700; "
             f"border-left: 3px solid {config.COLOR_ACCENT}; padding-left: 10px;"
@@ -380,55 +438,8 @@ class AIPanel(QWidget):
 
         lay.addWidget(cam_card)
 
-        # ── 4. Gesture Recognition Progress ──────────────────────────────
-        prog_card = self._make_card()
-        prog_lay  = QVBoxLayout(prog_card)
-        prog_lay.setContentsMargins(12, 10, 12, 10)
-        prog_lay.setSpacing(6)
-
-        prog_header = QHBoxLayout()
-        prog_title = QLabel("Gesture Recognition Progress")
-        prog_title.setStyleSheet(f"color: {config.COLOR_TEXT}; font-size: 12px; font-weight: 600;")
-        prog_header.addWidget(prog_title)
-        prog_header.addStretch()
-        self._gesture_lbl = QLabel("")
-        self._gesture_lbl.setStyleSheet(
-            f"color: {config.COLOR_ACCENT}; font-size: 11px; font-weight: 600;"
-        )
-        prog_header.addWidget(self._gesture_lbl)
-        prog_lay.addLayout(prog_header)
-
-        self._progress = QProgressBar()
-        self._progress.setRange(0, 100)
-        self._progress.setValue(0)
-        self._progress.setTextVisible(False)
-        self._progress.setFixedHeight(12)
-        self._progress.setStyleSheet(f"""
-            QProgressBar {{
-                background: {config.COLOR_BORDER};
-                border-radius: 6px;
-            }}
-            QProgressBar::chunk {{
-                background: qlineargradient(x1:0,y1:0,x2:1,y2:0,
-                    stop:0 {config.COLOR_SUCCESS}, stop:1 #16A34A);
-                border-radius: 6px;
-            }}
-        """)
-        prog_lay.addWidget(self._progress)
-
-        prog_footer = QHBoxLayout()
-        self._progress_pct = QLabel("0%")
-        self._progress_pct.setStyleSheet(
-            f"color: {config.COLOR_SUBTEXT}; font-size: 11px;"
-        )
-        prog_footer.addStretch()
-        prog_footer.addWidget(self._progress_pct)
-        prog_lay.addLayout(prog_footer)
-
-        lay.addWidget(prog_card)
-
-        # ── 5. Gesture Library ────────────────────────────────────────────
-        lib_title = QLabel("GESTURE LIBRARY")
+        # ── 5. Gesture Commands ───────────────────────────────────────────
+        lib_title = QLabel("GESTURE COMMANDS")
         lib_title.setStyleSheet(
             f"color: {config.COLOR_MUTED}; font-size: 10px; font-weight: 700; "
             f"letter-spacing: 1px; margin-top: 4px;"
@@ -448,6 +459,7 @@ class AIPanel(QWidget):
         grid.setSpacing(6)
         for i, g in enumerate(gestures):
             card = GestureCard(g["gesture_name"], g["icon_path"])
+            card.clicked.connect(self.manual_gesture_added.emit)
             grid.addWidget(card, i // 3, i % 3)
         parent_lay.addLayout(grid)
 
@@ -551,15 +563,35 @@ class AIPanel(QWidget):
         self.camera_widget.update_frame(bgr)
 
     def update_progress(self, pct: int) -> None:
-        self._progress.setValue(pct)
-        self._progress_pct.setText(f"{pct}%")
+        cw = self.camera_widget
+        cw._prog_bar.setValue(pct)
+        if not cw._confirmed:
+            cw._prog_lbl.setText(f"{cw._current_gesture} ({pct}%)")
+            if not cw._prog_overlay.isVisible():
+                cw._prog_overlay.show()
 
     def update_current_gesture(self, name: str) -> None:
-        self._gesture_lbl.setText(name if name else "")
+        cw = self.camera_widget
+        cw._current_gesture = name
+        cw._confirmed = False
+        cw._prog_lbl.setText(f"{name} (0%)")
+        cw._prog_bar.setValue(0)
+        cw._prog_overlay.show()
 
     def on_gesture_confirmed(self, name: str) -> None:
-        self._gesture_lbl.setText(f"✓ {name}")
-        QTimer.singleShot(1200, lambda: self._gesture_lbl.setText(""))
+        cw = self.camera_widget
+        cw._current_gesture = name
+        cw._confirmed = True
+        cw._prog_lbl.setText(f"✓ {name}")
+        cw._prog_bar.setValue(100)
+        cw._prog_overlay.show()
+        QTimer.singleShot(1200, self._clear_confirmation)
+
+    def _clear_confirmation(self) -> None:
+        cw = self.camera_widget
+        cw._confirmed = False
+        cw._current_gesture = ""
+        cw._prog_overlay.hide()
 
     def update_quality(self, metrics: dict) -> None:
         """Route quality metrics to the camera widget overlay (no separate card)."""

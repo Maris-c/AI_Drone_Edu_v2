@@ -61,6 +61,24 @@ class MissionController(QObject):
         self.mission_cleared.emit()
         self.validation_cleared.emit()
 
+    def remove_block(self, idx: int) -> None:
+        if 0 <= idx < len(self.mission.blocks):
+            self.mission.blocks.pop(idx)
+            self.mission_loaded.emit(self.mission.blocks)
+
+    def update_block_params(self, idx: int, new_params: dict) -> None:
+        if 0 <= idx < len(self.mission.blocks):
+            block = self.mission.blocks[idx]
+            block.params.update(new_params)
+            self.block_updated.emit(idx, block)
+
+    def reorder_block(self, old_idx: int, new_idx: int) -> None:
+        if 0 <= old_idx < len(self.mission.blocks) and 0 <= new_idx <= len(self.mission.blocks):
+            block = self.mission.blocks.pop(old_idx)
+            # if moving down, the index shifted because we popped
+            self.mission.blocks.insert(new_idx, block)
+            self.mission_loaded.emit(self.mission.blocks)
+
     def blocks(self) -> List[MissionBlock]:
         return self.mission.blocks
 

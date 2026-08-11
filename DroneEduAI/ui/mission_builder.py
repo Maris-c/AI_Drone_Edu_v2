@@ -51,11 +51,11 @@ class MissionBuilder(QWidget):
 
         # Left panel
         self.ai_panel = AIPanel()
-        self.ai_panel.setMinimumWidth(380)
+        self.ai_panel.setMinimumWidth(320)
 
         # Right panel — pass mavlink controller so it can embed MAVLinkPanel
         self.mission_panel = MissionPanel(self._mission, self._mavlink)
-        self.mission_panel.setMinimumWidth(300)
+        self.mission_panel.setMinimumWidth(280)
 
         splitter.addWidget(self.ai_panel)
         splitter.addWidget(self.mission_panel)
@@ -80,6 +80,7 @@ class MissionBuilder(QWidget):
         # AI panel → camera service control
         self.ai_panel.camera_toggle_requested.connect(self._on_camera_toggle)
         self.ai_panel.model_path_changed.connect(self._on_model_path_changed)
+        self.ai_panel.manual_gesture_added.connect(self._mission.add_gesture)
 
         # Gesture controller → AI panel (progress)
         self._gesture.progress_updated.connect(self.ai_panel.update_progress)

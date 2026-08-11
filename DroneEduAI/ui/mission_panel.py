@@ -15,14 +15,15 @@ from typing import List
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QFrame, QScrollArea, QSizePolicy, QFileDialog, QMessageBox,
-    QGraphicsOpacityEffect,
-)
-from PySide6.QtCore import (
-    Qt, Signal, QPropertyAnimation, QEasingCurve,
-    QAbstractAnimation, QTimer, QSize,
+    QGraphicsOpacityEffect, QDoubleSpinBox,
 )
 from PySide6.QtGui import (
     QPainter, QPen, QColor, QFont, QPixmap, QLinearGradient,
+    QDrag, QCursor
+)
+from PySide6.QtCore import (
+    Qt, Signal, QPropertyAnimation, QEasingCurve,
+    QAbstractAnimation, QTimer, QSize, QMimeData
 )
 
 import config
@@ -109,6 +110,9 @@ def _svg_pixmap(icon_name: str, size: int = 30) -> QPixmap | None:
 
 
 class MissionBlockCard(QFrame):
+    edit_requested = Signal(object)
+    delete_requested = Signal(object)
+
     def __init__(self, block: MissionBlock, parent=None):
         super().__init__(parent)
         self.block = block
@@ -116,70 +120,123 @@ class MissionBlockCard(QFrame):
         self._build_ui()
 
     def _build_ui(self) -> None:
+        c = self.block.color
         self.setStyleSheet(f"""
             QFrame#missionBlockCard {{
-                background: {config.COLOR_CARD};
-                border: 1px solid {config.COLOR_BORDER};
-                border-left: 4px solid {self.block.color};
+                background: {c};
+                border: 1px solid {c};
                 border-radius: 12px;
             }}
             QFrame#missionBlockCard:hover {{
-                border: 1px solid {self.block.color}88;
-                border-left: 4px solid {self.block.color};
-                background: #1f2f47;
+                border: 1px solid #ffffff;
             }}
         """)
 
         main_lay = QHBoxLayout(self)
-        main_lay.setContentsMargins(14, 10, 14, 10)
-        main_lay.setSpacing(12)
+        main_lay.setContentsMargins(10, 8, 10, 8)
+        main_lay.setSpacing(10)
 
-        # Icon
+        # Icon and Title in a sub-frame
+        info_frame = QFrame()
+        info_lay = QHBoxLayout(info_frame)
+        info_lay.setContentsMargins(8, 6, 12, 6)
+        
         icon_lbl = QLabel()
-        icon_lbl.setFixedSize(36, 36)
+        icon_lbl.setFixedSize(28, 28)
         icon_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        pix = _svg_pixmap(self.block.icon_name, 32)
+        pix = _svg_pixmap(self.block.icon_name, 24)
         if pix:
             icon_lbl.setPixmap(pix)
         else:
             icon_lbl.setText("🚁")
-            icon_lbl.setStyleSheet("font-size: 20px;")
-        main_lay.addWidget(icon_lbl)
+        info_lay.addWidget(icon_lbl)
 
-        # Text area
-        text_lay = QVBoxLayout()
-        text_lay.setSpacing(3)
-
-        # Tag label  [GESTURE] or [MISSION START]
-        tag = QLabel(f"[ {self.block.get_tag()} ]")
-        tag.setStyleSheet(
-            f"color: {config.COLOR_MUTED}; font-size: 10px; font-family: 'Courier New';"
-        )
-        text_lay.addWidget(tag)
-
-        # Title
         title = QLabel(self.block.title)
-        title.setStyleSheet(
-            f"color: {config.COLOR_TEXT}; font-size: 14px; font-weight: 700;"
-        )
-        text_lay.addWidget(title)
+        title.setStyleSheet("color: #FFFFFF; font-size: 13px; font-weight: 700;")
+        info_lay.addWidget(title)
+        main_lay.addWidget(info_frame)
 
-        main_lay.addLayout(text_lay)
+        # Warning for TAKEOFF / LAND
+        if self.block.cmd in ("TAKEOFF", "LAND"):
+            warn_lbl = QLabel(f"⚠ {self.block.cmd}")
+            warn_lbl.setStyleSheet("color: #FFFFFF; font-size: 12px; font-weight: 800; background: rgba(255,0,0,0.5); padding: 4px; border-radius: 4px;")
+            main_lay.addWidget(warn_lbl)
+
         main_lay.addStretch()
 
-        # Param chip
-        self._param_lbl = QLabel(self.block.get_param_text())
-        self._param_lbl.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-        self._param_lbl.setStyleSheet(
-            f"color: {self.block.color}; font-size: 12px; font-weight: 600; "
-            f"background: {self.block.color}18; border-radius: 6px; padding: 3px 8px;"
-        )
-        self._param_lbl.setMinimumWidth(80)
-        main_lay.addWidget(self._param_lbl)
+        # Inline Edit
+        self._param_edit = QDoubleSpinBox()
+        self._param_edit.setDecimals(1)
+        self._param_edit.setStyleSheet(f"""
+            QDoubleSpinBox {{
+                color: #FFFFFF; font-size: 11px; font-weight: 700;
+                background: rgba(0,0,0,0.2); border-radius: 4px; padding: 2px 4px;
+            }}
+            QDoubleSpinBox::up-button, QDoubleSpinBox::down-button {{ width: 0px; }}
+        """)
+        
+        has_param = False
+        if "alt" in self.block.params:
+            self._param_edit.setRange(0.5, 10.0)
+            self._param_edit.setValue(self.block.params["alt"])
+            self._param_edit.setSuffix(" m")
+            self._param_edit.valueChanged.connect(lambda v: self.edit_requested.emit((self, {"alt": v})))
+            has_param = True
+        elif "duration" in self.block.params:
+            self._param_edit.setRange(0.5, 20.0)
+            self._param_edit.setValue(self.block.params["duration"])
+            self._param_edit.setSuffix(" s")
+            self._param_edit.valueChanged.connect(lambda v: self.edit_requested.emit((self, {"duration": v})))
+            has_param = True
+        elif "delta" in self.block.params:
+            self._param_edit.setRange(-10.0, 10.0)
+            self._param_edit.setValue(self.block.params["delta"])
+            self._param_edit.setSuffix(" m")
+            self._param_edit.valueChanged.connect(lambda v: self.edit_requested.emit((self, {"delta": v})))
+            has_param = True
+        
+        if self.block.cmd in ("TAKEOFF", "LAND") or not has_param:
+            self._param_edit.hide()
+            
+        main_lay.addWidget(self._param_edit)
+
+        # Actions
+        del_btn = QPushButton("✕")
+        del_btn.setFixedSize(26, 26)
+        del_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        del_btn.setStyleSheet("background: rgba(255,0,0,0.4); color: white; border-radius: 13px; font-size: 12px;")
+        del_btn.clicked.connect(lambda: self.delete_requested.emit(self))
+        main_lay.addWidget(del_btn)
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.drag_start_pos = event.pos()
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event):
+        if not (event.buttons() & Qt.MouseButton.LeftButton):
+            return
+        if (event.pos() - self.drag_start_pos).manhattanLength() < 5:
+            return
+
+        drag = QDrag(self)
+        mime = QMimeData()
+        drag.setMimeData(mime)
+        pixmap = self.grab()
+        drag.setPixmap(pixmap)
+        drag.setHotSpot(event.pos())
+        drag.exec(Qt.DropAction.MoveAction)
 
     def update_block(self, block: MissionBlock) -> None:
         self.block = block
-        self._param_lbl.setText(block.get_param_text())
+        self._param_edit.blockSignals(True)
+        if "alt" in block.params:
+            self._param_edit.setValue(block.params["alt"])
+        elif "duration" in block.params:
+            self._param_edit.setValue(block.params["duration"])
+        elif "delta" in block.params:
+            self._param_edit.setValue(block.params["delta"])
+        self._param_edit.blockSignals(False)
 
 
 # ────────────────────────────────────────────────────────────────────────────
@@ -210,6 +267,63 @@ class WarningBanner(QFrame):
 
     def hide_message(self) -> None:
         self.hide()
+
+
+# ────────────────────────────────────────────────────────────────────────────
+# Block Container for Drag and Drop
+# ────────────────────────────────────────────────────────────────────────────
+class BlockContainerWidget(QWidget):
+    block_moved = Signal(int, int)
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setAcceptDrops(True)
+
+    def dragEnterEvent(self, event):
+        if event.source() and isinstance(event.source(), MissionBlockCard):
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+
+    def dragMoveEvent(self, event):
+        if event.source() and isinstance(event.source(), MissionBlockCard):
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+
+    def dropEvent(self, event):
+        source_card = event.source()
+        if source_card and isinstance(source_card, MissionBlockCard):
+            drop_y = event.position().y()
+            lay = self.layout()
+            
+            cards = []
+            for i in range(lay.count()):
+                w = lay.itemAt(i).widget()
+                if isinstance(w, MissionBlockCard):
+                    cards.append(w)
+            
+            if source_card not in cards:
+                event.ignore()
+                return
+                
+            old_idx = cards.index(source_card)
+            new_idx = len(cards)
+            
+            for i, card in enumerate(cards):
+                if drop_y < card.y() + card.height() / 2:
+                    new_idx = i
+                    break
+                    
+            if new_idx > old_idx:
+                new_idx -= 1
+                
+            if old_idx != new_idx:
+                self.block_moved.emit(old_idx, new_idx)
+                
+            event.acceptProposedAction()
+        else:
+            event.ignore()
 
 
 # ────────────────────────────────────────────────────────────────────────────
@@ -288,8 +402,9 @@ class MissionPanel(QWidget):
             QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0px; }
         """)
 
-        self._blocks_container = QWidget()
+        self._blocks_container = BlockContainerWidget()
         self._blocks_container.setStyleSheet("background: transparent;")
+        self._blocks_container.block_moved.connect(self._mc.reorder_block)
         self._blocks_layout = QVBoxLayout(self._blocks_container)
         self._blocks_layout.setContentsMargins(0, 0, 0, 0)
         self._blocks_layout.setSpacing(0)
@@ -301,14 +416,6 @@ class MissionPanel(QWidget):
 
         self._scroll.setWidget(self._blocks_container)
         wrap_lay.addWidget(self._scroll)
-
-        # Empty state label
-        self._empty_lbl = QLabel("✨ Gesture detected blocks\nwill appear here automatically")
-        self._empty_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._empty_lbl.setStyleSheet(
-            f"color: {config.COLOR_MUTED}; font-size: 12px; line-height: 1.6;"
-        )
-        self._blocks_layout.insertWidget(1, self._empty_lbl)  # Between header and stretch
 
         # ── MAVLink Panel ──────────────────────────────────────────────────
         self.mavlink_panel = MAVLinkPanel()
@@ -386,7 +493,6 @@ class MissionPanel(QWidget):
 
     # ── Slots from MissionController ─────────────────────────────────────
     def add_block(self, block: MissionBlock) -> None:
-        self._hide_empty()
 
         # Connector
         if self._block_cards:
@@ -398,6 +504,8 @@ class MissionPanel(QWidget):
 
         # Block card
         card = MissionBlockCard(block)
+        card.edit_requested.connect(self._on_card_edited)
+        card.delete_requested.connect(self._on_card_deleted)
         card.setMaximumHeight(0)
         idx = self._blocks_layout.count() - 1
         self._blocks_layout.insertWidget(idx, card)
@@ -435,7 +543,6 @@ class MissionPanel(QWidget):
         self._block_cards.clear()
         self._connector_widgets.clear()
         self._update_count()
-        self._show_empty()
 
     def load_blocks(self, blocks: list) -> None:
         self.clear_blocks()
@@ -490,12 +597,6 @@ class MissionPanel(QWidget):
                 self.show_warning(f"✗ Import failed: {msg}")
 
     # ── Helpers ──────────────────────────────────────────────────────────
-    def _hide_empty(self) -> None:
-        self._empty_lbl.hide()
-
-    def _show_empty(self) -> None:
-        self._empty_lbl.show()
-
     def _update_count(self) -> None:
         n = len(self._block_cards)
         self._block_count_lbl.setText(f"{n} block{'s' if n != 1 else ''}")
@@ -503,3 +604,15 @@ class MissionPanel(QWidget):
     def _scroll_to_bottom(self) -> None:
         sb = self._scroll.verticalScrollBar()
         sb.setValue(sb.maximum())
+
+    def _on_card_deleted(self, card: MissionBlockCard) -> None:
+        if card in self._block_cards:
+            idx = self._block_cards.index(card)
+            self._mc.remove_block(idx)
+
+    def _on_card_edited(self, data: tuple) -> None:
+        card, new_params = data
+        if card not in self._block_cards:
+            return
+        idx = self._block_cards.index(card)
+        self._mc.update_block_params(idx, new_params)

@@ -17,18 +17,29 @@ from ui.main_window import MainWindow
 
 def main() -> None:
     app = QApplication(sys.argv)
-    app.setApplicationName("DroneEduAI")
+    app.setApplicationName("Drone Edu AI")
     app.setApplicationVersion("1.0.0")
     app.setOrganizationName("STEAM UAV Lab")
     app.setStyle("Fusion")
+    
+    import config
+    from PySide6.QtGui import QIcon
+    icon_path = os.path.join(config.ICONS_DIR, "drone.png")
+    if os.path.exists(icon_path):
+        app.setWindowIcon(QIcon(icon_path))
+
+    if sys.platform == "win32":
+        import ctypes
+        myappid = 'steamuavlab.droneeduai.missionbuilder.1'
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
 
     # Default font
     default_font = QFont("Segoe UI", 10)
     app.setFont(default_font)
 
     win = MainWindow()
-    win.setMinimumSize(1100, 680)
-    win.resize(1400, 860)
+    win.setMinimumSize(800, 600)
+    win.resize(1200, 800)
     win.show()
 
     sys.exit(app.exec())

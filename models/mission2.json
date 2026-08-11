@@ -1,0 +1,22 @@
+[
+  {
+    "cmd": "TAKEOFF",
+    "alt": 1.5
+  },
+  {
+    "cmd": "FORWARD",
+    "duration": 2,
+    "repeat": 2
+  },
+  {
+    "cmd": "UP",
+    "delta": 0.5
+  },
+  {
+    "cmd": "HOVER",
+    "duration": 3
+  },
+  {
+    "cmd": "LAND"
+  }
+]

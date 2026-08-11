@@ -64,7 +64,7 @@ class MAVLinkPanel(QWidget):
         icon_lbl = QLabel("📡")
         icon_lbl.setStyleSheet("font-size: 14px;")
         title_row.addWidget(icon_lbl)
-        title_lbl = QLabel("MAVLink")
+        title_lbl = QLabel("Drone Connection")
         title_lbl.setStyleSheet(
             f"color: {config.COLOR_TEXT}; font-size: 13px; font-weight: 700;"
         )
@@ -127,7 +127,7 @@ class MAVLinkPanel(QWidget):
 
         lay.addLayout(conn_row)
 
-        # ── Telemetry grid ────────────────────────────────────────────────
+        # ── Telemetry (Single Line) ───────────────────────────────────────
         telem = QFrame()
         telem.setStyleSheet(f"""
             QFrame {{
@@ -136,48 +136,19 @@ class MAVLinkPanel(QWidget):
                 border-radius: 8px;
             }}
         """)
-        tgrid = QGridLayout(telem)
-        tgrid.setContentsMargins(8, 6, 8, 6)
-        tgrid.setHorizontalSpacing(10)
-        tgrid.setVerticalSpacing(3)
-
-        def _cell(label: str) -> tuple[QLabel, QLabel]:
-            k = QLabel(label)
-            k.setStyleSheet(f"color: {config.COLOR_MUTED}; font-size: 10px;")
-            v = QLabel("—")
-            v.setStyleSheet(
-                f"color: {config.COLOR_TEXT}; font-size: 11px; font-weight: 600;"
-            )
-            return k, v
-
-        kmode, self._t_mode   = _cell("Mode")
-        kbat,  self._t_bat    = _cell("Battery")
-        kspd,  self._t_speed  = _cell("Speed")
-        kalt,  self._t_alt    = _cell("Alt")
-        klat,  self._t_lat    = _cell("Lat")
-        klon,  self._t_lon    = _cell("Lon")
-        kroll, self._t_roll   = _cell("Roll")
-        kpitch,self._t_pitch  = _cell("Pitch")
-        kyaw,  self._t_yaw    = _cell("Yaw")
-
-        cells = [
-            (kmode, self._t_mode,  kbat,   self._t_bat,   kspd,  self._t_speed),
-            (kalt,  self._t_alt,   klat,   self._t_lat,   klon,  self._t_lon),
-            (kroll, self._t_roll,  kpitch, self._t_pitch, kyaw,  self._t_yaw),
-        ]
-        for row, (k1, v1, k2, v2, k3, v3) in enumerate(cells):
-            tgrid.addWidget(k1, row, 0)
-            tgrid.addWidget(v1, row, 1)
-            tgrid.addWidget(k2, row, 2)
-            tgrid.addWidget(v2, row, 3)
-            tgrid.addWidget(k3, row, 4)
-            tgrid.addWidget(v3, row, 5)
-
+        t_lay = QHBoxLayout(telem)
+        t_lay.setContentsMargins(12, 8, 12, 8)
+        
+        self._t_single = QLabel("Mode: —  |  Alt: —  |  Bat: —")
+        self._t_single.setStyleSheet(f"color: {config.COLOR_TEXT}; font-size: 11px; font-weight: 600;")
+        self._t_single.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        t_lay.addWidget(self._t_single)
+        
         lay.addWidget(telem)
 
         # ── Log header ────────────────────────────────────────────────────
         log_hdr = QHBoxLayout()
-        log_title = QLabel("COMMAND LOG")
+        log_title = QLabel("ACTIVITY LOG")
         log_title.setStyleSheet(
             f"color: {config.COLOR_MUTED}; font-size: 10px; font-weight: 700; letter-spacing: 1px;"
         )
@@ -234,8 +205,11 @@ class MAVLinkPanel(QWidget):
         self._connected = connected
         color = config.COLOR_SUCCESS if connected else config.COLOR_MUTED
         self._dot.setStyleSheet(f"color: {color}; font-size: 11px;")
-        self._status_lbl.setText(label)
+        
+        display_label = "Connected" if connected else "Disconnected"
+        self._status_lbl.setText(display_label)
         self._status_lbl.setStyleSheet(f"color: {color}; font-size: 11px;")
+        
         if connected:
             self._conn_btn.setText("Disconnect")
             self._conn_btn.setStyleSheet(self._btn_style(config.COLOR_DANGER))
@@ -245,32 +219,16 @@ class MAVLinkPanel(QWidget):
         self._append(f"{'✓' if connected else '✗'} {label}")
 
     def update_telemetry(self, data: dict) -> None:
-        self._t_mode.setText(str(data.get("mode", "—")))
-        self._t_speed.setText(f"{data.get('speed', 0):.1f} m/s")
-        self._t_alt.setText(f"{data.get('alt', 0):.1f} m")
-        self._t_lat.setText(f"{data.get('lat', 0):.5f}°")
-        self._t_lon.setText(f"{data.get('lon', 0):.5f}°")
-        self._t_roll.setText(f"{data.get('roll', 0):.1f}°")
-        self._t_pitch.setText(f"{data.get('pitch', 0):.1f}°")
-        self._t_yaw.setText(f"{data.get('yaw', 0):.1f}°")
-
-        # Battery with color coding
+        mode = str(data.get("mode", "—"))
+        alt = f"{data.get('alt', 0):.1f}m"
+        
         bat = data.get("battery", -1)
         if isinstance(bat, int) and bat >= 0:
-            self._t_bat.setText(f"{bat}%")
-            c = (config.COLOR_SUCCESS if bat > 50
-                 else config.COLOR_WARNING if bat > 20
-                 else config.COLOR_DANGER)
-            self._t_bat.setStyleSheet(
-                f"color: {c}; font-size: 11px; font-weight: 600;"
-            )
-
-        # Mode color: green when armed
-        armed = data.get("armed", False)
-        mode_color = config.COLOR_SUCCESS if armed else config.COLOR_TEXT
-        self._t_mode.setStyleSheet(
-            f"color: {mode_color}; font-size: 11px; font-weight: 600;"
-        )
+            bat_str = f"{bat}%"
+        else:
+            bat_str = "—"
+            
+        self._t_single.setText(f"Mode: {mode}  |  Alt: {alt}  |  Bat: {bat_str}")
 
     def append_log(self, msg: str) -> None:
         self._append(msg)

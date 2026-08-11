@@ -13,7 +13,7 @@ PROJECT_ROOT  = os.path.dirname(DRONE_EDU_DIR)                # .../AI_Drone_Edu
 # ---------------------------------------------------------------------------
 # Asset & model paths
 # ---------------------------------------------------------------------------
-ICONS_DIR          = os.path.join(PROJECT_ROOT, "icons")
+ICONS_DIR          = os.path.join(DRONE_EDU_DIR, "icons")
 GESTURE_TESTER_DIR = os.path.join(PROJECT_ROOT, "GestureTesterApp")
 MODEL_TRAINER_DIR  = os.path.join(PROJECT_ROOT, "AIGestureModelTrainer")
 
@@ -31,9 +31,22 @@ CAMERA_HEIGHT = 480
 # ---------------------------------------------------------------------------
 # Gesture verification
 # ---------------------------------------------------------------------------
-GESTURE_CONFIRM_DURATION_MS       = 5000  # hold for 5 s to confirm
+GESTURE_CONFIRM_DURATION_MS       = 2000  # hold for 2 s to confirm
 GESTURE_CONFIDENCE_THRESHOLD      = 60.0  # minimum % confidence
 GESTURE_PROGRESS_UPDATE_INTERVAL  = 100   # ms between progress ticks
+
+# ---------------------------------------------------------------------------
+# Inference performance tuning
+# ---------------------------------------------------------------------------
+# MediaPipe runs on a downscaled copy to reduce CPU cost.
+# Display frame is always full-resolution (CAMERA_WIDTH x CAMERA_HEIGHT).
+# 0.5 = half-res for inference → ~4x faster inference, negligible accuracy loss
+INFER_SCALE     = 0.5
+
+# Maximum FPS the display loop targets.  Setting this lower than the camera's
+# native FPS prevents wasting CPU generating frames faster than the monitor
+# can show them.  Set to 0 to run as fast as possible.
+DISPLAY_FPS_CAP = 30
 
 # ---------------------------------------------------------------------------
 # Color palette  (Dark Theme)
