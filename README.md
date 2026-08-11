@@ -19,6 +19,7 @@ Dự án được chia thành nhiều ứng dụng và module con, mỗi phần 
 ## 🚁 Về Ứng dụng `DroneEduAI` (Main Application)
 
 **DroneEduAI** là ứng dụng chính của dự án, được phát triển dưới dạng Desktop App sử dụng nền tảng **PySide6 (Qt Framework)** với giao diện Dark Theme hiện đại.
+![alt text](<Screenshot 2026-08-11 155348.png>)
 
 ### Các tính năng chính:
 
