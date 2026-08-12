@@ -25,13 +25,13 @@ Dự án được chia thành nhiều ứng dụng và module con, mỗi phần 
    - Sử dụng **MediaPipe Hands** để lấy tọa độ khung xương tay (Landmarks) với tốc độ cao.
    - Phân loại cử chỉ theo thời gian thực bằng thuật toán học máy **Logistic Regression (scikit-learn)**.
    - Hệ thống có cơ chế kiểm tra chất lượng (Quality Check), yêu cầu giữ cử chỉ trong 2 giây để tránh nhiễu trước khi sinh ra khối lệnh tương ứng.
+![alt text](image.png)
 ![alt text](image-2.png)
 2. **Native Drag-and-Drop Mission Builder (Giao diện lập trình kéo thả)**
    - Xây dựng hoàn toàn bằng **PySide6** với khả năng kéo-thả (Drag & Drop) mượt mà.
    - Người dùng có thể kéo thả các thẻ lệnh (Block Cards) như: Takeoff, Land, Forward, Hover...
    - Tùy chỉnh thông số cho từng khối lệnh (độ cao, thời gian bay, khoảng cách).
    - Hỗ trợ lưu và tải các kịch bản bay (Mission) dưới dạng JSON.
-![alt text](image.png)
 3. **Điều khiển & Giám sát Drone (MAVLink/ArduPilot)**
    - Giao tiếp trực tiếp với Flight Controller (chạy ArduPilot) thông qua giao thức **PyMAVLink**.
    - Cung cấp trạng thái thời gian thực (Telemetry) bao gồm pin, chế độ bay, và chất lượng tín hiệu.
