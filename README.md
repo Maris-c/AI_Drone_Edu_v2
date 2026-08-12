@@ -21,7 +21,7 @@ Dự án được chia thành nhiều ứng dụng và module con, mỗi phần 
 **DroneEduAI** là ứng dụng chính của dự án, được phát triển dưới dạng Desktop App sử dụng nền tảng **PySide6 (Qt Framework)** với giao diện Dark Theme hiện đại.
 
 ### Các tính năng chính:
-
+![alt text](image-2.png)
 1. **AI Gesture Control (Điều khiển bằng cử chỉ)**
    - Sử dụng **MediaPipe Hands** để lấy tọa độ khung xương tay (Landmarks) với tốc độ cao.
    - Phân loại cử chỉ theo thời gian thực bằng thuật toán học máy **Logistic Regression (scikit-learn)**.
@@ -32,14 +32,12 @@ Dự án được chia thành nhiều ứng dụng và module con, mỗi phần 
    - Người dùng có thể kéo thả các thẻ lệnh (Block Cards) như: Takeoff, Land, Forward, Hover...
    - Tùy chỉnh thông số cho từng khối lệnh (độ cao, thời gian bay, khoảng cách).
    - Hỗ trợ lưu và tải các kịch bản bay (Mission) dưới dạng JSON.
-![alt text](<Screenshot 2026-08-11 155348.png>)
-
+![alt text](image.png)
 3. **Điều khiển & Giám sát Drone (MAVLink/ArduPilot)**
    - Giao tiếp trực tiếp với Flight Controller (chạy ArduPilot) thông qua giao thức **PyMAVLink**.
    - Cung cấp trạng thái thời gian thực (Telemetry) bao gồm pin, chế độ bay, và chất lượng tín hiệu.
    - Hỗ trợ kiểm thử kịch bản thông qua môi trường mô phỏng (SITL) trước khi triển khai bay thực tế.
-![alt text](image.png)
-
+![alt text](image-1.png)
 ## 🛠 Yêu cầu hệ thống
 - Python 3.9+
 - Các thư viện yêu cầu: `PySide6`, `mediapipe`, `opencv-python`, `scikit-learn`, `pymavlink` (có thể cài đặt qua file `requirements.txt`).
