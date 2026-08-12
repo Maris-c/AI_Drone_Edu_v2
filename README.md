@@ -21,12 +21,11 @@ Dự án được chia thành nhiều ứng dụng và module con, mỗi phần 
 **DroneEduAI** là ứng dụng chính của dự án, được phát triển dưới dạng Desktop App sử dụng nền tảng **PySide6 (Qt Framework)** với giao diện Dark Theme hiện đại.
 
 ### Các tính năng chính:
-![alt text](image-2.png)
 1. **AI Gesture Control (Điều khiển bằng cử chỉ)**
    - Sử dụng **MediaPipe Hands** để lấy tọa độ khung xương tay (Landmarks) với tốc độ cao.
    - Phân loại cử chỉ theo thời gian thực bằng thuật toán học máy **Logistic Regression (scikit-learn)**.
    - Hệ thống có cơ chế kiểm tra chất lượng (Quality Check), yêu cầu giữ cử chỉ trong 2 giây để tránh nhiễu trước khi sinh ra khối lệnh tương ứng.
-
+![alt text](image-2.png)
 2. **Native Drag-and-Drop Mission Builder (Giao diện lập trình kéo thả)**
    - Xây dựng hoàn toàn bằng **PySide6** với khả năng kéo-thả (Drag & Drop) mượt mà.
    - Người dùng có thể kéo thả các thẻ lệnh (Block Cards) như: Takeoff, Land, Forward, Hover...
